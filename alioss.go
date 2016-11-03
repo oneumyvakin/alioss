@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"sort"
 	"strings"
 
@@ -16,6 +17,24 @@ type AliOss struct {
 	Svc    *oss.Client
 	Region string
 	Bucket string
+}
+
+type downloader struct {
+	AliOss
+
+	File       *os.File
+	FileOffset int64
+	Err        error
+}
+
+type filePart struct {
+	Key        string
+	Range      string
+	Etag       string
+	Offset     int64
+	Length     int64
+	PartNumber int64
+	Body       []byte
 }
 
 // Get regions
