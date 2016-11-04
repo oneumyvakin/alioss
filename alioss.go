@@ -33,7 +33,7 @@ type filePart struct {
 	Etag       string
 	Offset     int64
 	Length     int64
-	PartNumber int64
+	PartNumber int
 	Body       []byte
 }
 
