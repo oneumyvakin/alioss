@@ -8,7 +8,7 @@ import (
 	"os"
 	"sort"
 	"strings"
-
+    
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
 )
 
@@ -75,7 +75,7 @@ func (alioss AliOss) GetBucketsList() (list []string, err error) {
 	}
 
 	for _, bucket := range result.Buckets {
-		list = append(list, *bucket.Name)
+		list = append(list, bucket.Name)
 	}
 
 	alioss.Log.Println("Get buckets:", list)
@@ -106,21 +106,40 @@ func (alioss AliOss) CreateBucket(name string) error {
 	return nil
 }
 
+func (alioss AliOss) CreateFolder(path string) error {
+    bucket, err := alioss.Svc.Bucket(alioss.Bucket)
+	if err != nil {
+		alioss.Log.Printf("Failed to create folder %s: %s\n", path, err)
+		return err
+	}
+    var emptyReader io.Reader
+	err = bucket.PutObject(path + "/", emptyReader)
+    if err != nil {
+        alioss.Log.Printf("Failed to create folder %s: %s\n", path, err)
+		return err
+    }
+
+	return err
+}
+
 // List files and folders.
 // SubFolder can be ""
 // Returns https://github.com/aliyun/aliyun-oss-go-sdk/blob/033d39afc575aa38ac40f8e2011710b7bacf9f7a/oss/type.go#L223
 func (alioss AliOss) GetBucketFilesList(subFolder string) ([]oss.ObjectProperties, error) {
-	subFolder = strings.TrimSuffix(subFolder, "/")
 	bucket, err := alioss.Svc.Bucket(alioss.Bucket)
 	if err != nil {
 		alioss.Log.Printf("Failed to list objects: %s\n", err)
-		return
+		return nil, err
 	}
-
+    
+    subFolder = strings.TrimSuffix(subFolder, "/")
+    if subFolder != "" {
+        subFolder = subFolder + "/"
+    }
 	result, err := bucket.ListObjects(oss.Prefix(subFolder), oss.Delimiter("/"))
 	if err != nil {
 		alioss.Log.Printf("Failed to list objects: %s\n", err)
-		return
+		return nil, err
 	}
 
 	alioss.Log.Printf("Get bucket files in /%s:\n", subFolder, result.Objects)
@@ -198,13 +217,13 @@ func (alioss AliOss) ListUnfinishedUploads() ([]oss.UncompletedUpload, error) {
 	bucket, err := alioss.Svc.Bucket(alioss.Bucket)
 	if err != nil {
 		alioss.Log.Printf("Failed list unfinised uploads: %s\n", err)
-		return
+		return nil, err
 	}
 
 	resp, err := bucket.ListMultipartUploads()
 	if err != nil {
 		alioss.Log.Printf("Failed list unfinised uploads: %s\n", err)
-		return
+		return nil, err
 	}
 
 	alioss.Log.Println("List bucket's unfinished uploads", resp)
@@ -277,7 +296,7 @@ func (alioss AliOss) CompleteUpload(key string, uploadId string) (err error) {
 		return
 	}
 
-	var completedParts []oss.UploadedPart
+	var completedParts []oss.UploadPart
 	for _, part := range respParts.UploadedParts {
 		completedPart := oss.UploadPart{
 			ETag:       part.ETag,

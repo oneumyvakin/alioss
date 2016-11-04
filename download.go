@@ -48,11 +48,14 @@ func (alioss AliOss) ResumeDownload(fileName, destinationPath string) error {
 	if err != nil {
 		return fmt.Errorf("Failed to stat destination file %s: %s\n", destinationPath, err)
 	}
-	var contentLength int64
-	contentLength, err = strconv.Atoi(remoteFileInfo.Get("Content-Length"))
+	
+	tmpContentLength, err := strconv.Atoi(remoteFileInfo.Get("Content-Length"))
 	if err != nil {
 		return fmt.Errorf("Failed to get header Content-Length of remote file %s: %s\n", fileName, err)
 	}
+    
+    var contentLength int64
+    contentLength = int64(tmpContentLength)
 	if contentLength < stat.Size() {
 		return fmt.Errorf("Failed to compare size of remote %s and destination file %s: %d <= %d\n", fileName, destinationPath, contentLength, stat.Size())
 	}
