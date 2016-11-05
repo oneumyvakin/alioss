@@ -28,6 +28,9 @@ func (alioss AliOss) Upload(filePath, destinationPath string) error {
 	alioss.IoClose(file)
 
 	key := destinationPath + "/" + filepath.Base(filePath)
+	if destinationPath == "" || destinationPath == "/" {
+		key = filepath.Base(filePath)
+	}
 
 	bucket, err := alioss.Svc.Bucket(alioss.Bucket)
 	if err != nil {
@@ -43,6 +46,7 @@ func (alioss AliOss) Upload(filePath, destinationPath string) error {
 	return nil
 }
 
+// Resume upload of local "filePath" to remote "key" identified by "uploadId"
 func (alioss AliOss) ResumeUpload(filePath, key, uploadId string) (err error) {
 	file, err := os.Open(filePath)
 	if err != nil {

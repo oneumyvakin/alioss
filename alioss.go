@@ -1,3 +1,4 @@
+// Package alioss is a simple wrapper around Aliyun OSS service
 package alioss
 
 import (
@@ -12,6 +13,7 @@ import (
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
 )
 
+// Main entry point for service manipulation
 type AliOss struct {
 	Log    *log.Logger
 	Svc    *oss.Client
@@ -37,7 +39,7 @@ type filePart struct {
 	Body       []byte
 }
 
-// Get regions
+// Get regions(endpoints)
 func (alioss AliOss) GetRegions() []string {
 	var regions = []string{
 		"oss-cn-hangzhou.aliyuncs.com",
@@ -106,6 +108,7 @@ func (alioss AliOss) CreateBucket(name string) error {
 	return nil
 }
 
+// Create folder
 func (alioss AliOss) CreateFolder(path string) error {
 	bucket, err := alioss.Svc.Bucket(alioss.Bucket)
 	if err != nil {
@@ -124,7 +127,6 @@ func (alioss AliOss) CreateFolder(path string) error {
 
 // List files and folders.
 // SubFolder can be ""
-// Returns https://github.com/aliyun/aliyun-oss-go-sdk/blob/033d39afc575aa38ac40f8e2011710b7bacf9f7a/oss/type.go#L223
 func (alioss AliOss) GetBucketFilesList(subFolder string) ([]oss.ObjectProperties, error) {
 	bucket, err := alioss.Svc.Bucket(alioss.Bucket)
 	if err != nil {
@@ -147,7 +149,7 @@ func (alioss AliOss) GetBucketFilesList(subFolder string) ([]oss.ObjectPropertie
 }
 
 // Get file info
-// Returns http.Header
+// Returns HTTP headers
 func (alioss AliOss) GetFileInfo(path string) (headers http.Header, err error) {
 	bucket, err := alioss.Svc.Bucket(alioss.Bucket)
 	if err != nil {
@@ -212,7 +214,6 @@ func (alioss AliOss) Delete(path string) (err error) {
 }
 
 // List bucket's unfinished uploads
-// https://github.com/aliyun/aliyun-oss-go-sdk/blob/033d39afc575aa38ac40f8e2011710b7bacf9f7a/oss/type.go#L356
 func (alioss AliOss) ListUnfinishedUploads() ([]oss.UncompletedUpload, error) {
 	bucket, err := alioss.Svc.Bucket(alioss.Bucket)
 	if err != nil {
@@ -321,6 +322,7 @@ func (alioss AliOss) CompleteUpload(key string, uploadId string) (err error) {
 	return
 }
 
+// Close resources and log if error
 func (alioss AliOss) IoClose(c io.Closer) {
 	err := c.Close()
 	if err != nil {

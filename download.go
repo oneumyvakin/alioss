@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -15,13 +16,14 @@ const (
 
 )
 
-// Optimistic download
+// Download remote "fileName" to local file in "destinationPath"
 func (alioss AliOss) Download(fileName, destinationPath string) error {
 	bucket, err := alioss.Svc.Bucket(alioss.Bucket)
 	if err != nil {
 		return fmt.Errorf("Failed to download file %s: %s\n", fileName, err)
 	}
 
+	fileName = strings.TrimPrefix(fileName, "/")
 	err = bucket.GetObjectToFile(fileName, destinationPath)
 	if err != nil {
 		return fmt.Errorf("Failed to download file %s to %s: %s\n", fileName, destinationPath, err)
@@ -30,7 +32,7 @@ func (alioss AliOss) Download(fileName, destinationPath string) error {
 	return nil
 }
 
-// Resume optimistic download
+// Resume download of remote "fileName" to existed local file in "destinationPath"
 func (alioss AliOss) ResumeDownload(fileName, destinationPath string) error {
 	remoteFileInfo, err := alioss.GetFileInfo(fileName)
 	if err != nil {
