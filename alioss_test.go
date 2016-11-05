@@ -1,16 +1,19 @@
 package alioss
 
 import (
-    "testing"
-    "path"
-    "os"
-    "log"
-    "time"
-    "math/rand"
-    "fmt"
-    "github.com/kardianos/osext"
-    "path/filepath"
-    "github.com/aliyun/aliyun-oss-go-sdk/oss"
+	"crypto/md5"
+	"encoding/hex"
+	"fmt"
+	"github.com/aliyun/aliyun-oss-go-sdk/oss"
+	"github.com/kardianos/osext"
+	"io"
+	"log"
+	"math/rand"
+	"os"
+	"path"
+	"path/filepath"
+	"testing"
+	"time"
 )
 
 var AliRegion string
@@ -19,15 +22,15 @@ var AliKeyId string
 var AliSecretKey string
 
 func init() {
-    AliRegion = os.Getenv("ALI_REGION")
-    AliBucket = os.Getenv("ALI_BUCKET")
-    AliKeyId = os.Getenv("ALI_ACCESS_KEY_ID")
-    AliSecretKey = os.Getenv("ALI_SECRET_ACCESS_KEY")
+	AliRegion = os.Getenv("ALI_REGION")
+	AliBucket = os.Getenv("ALI_BUCKET")
+	AliKeyId = os.Getenv("ALI_ACCESS_KEY_ID")
+	AliSecretKey = os.Getenv("ALI_SECRET_ACCESS_KEY")
 
 }
 
 func TestResumeUpload(t *testing.T) {
-    if AliRegion == "" || AliBucket == "" || AliKeyId == "" || AliSecretKey == "" {
+	if AliRegion == "" || AliBucket == "" || AliKeyId == "" || AliSecretKey == "" {
 		t.Fatal("Environment variables ALI_REGION or ALI_BUCKET or ALI_ACCESS_KEY_ID or ALI_SECRET_ACCESS_KEY are not defined")
 	}
 
@@ -42,40 +45,77 @@ func TestResumeUpload(t *testing.T) {
 		Region: AliRegion,
 		Bucket: AliBucket,
 	}
-    
-    bucket, err := aliSvc.Svc.Bucket(aliSvc.Bucket)
-    if err != nil {
+
+	bucket, err := aliSvc.Svc.Bucket(aliSvc.Bucket)
+	if err != nil {
 		t.Fatalf("Failed to instant bucket: %s", err)
 	}
-    
-    testFile := createTestFile(2 * DefaultUploadPartSize)
-    
-    imur, err := bucket.InitiateMultipartUpload(filepath.Base(testFile))
-    
-    unfUploads, err := aliSvc.ListUnfinishedUploads()
-    if err != nil {
+
+	testFile := createTestFile(2 * DefaultUploadPartSize)
+	testFileDownloaded := testFile + ".downloaded"
+
+	imur, err := bucket.InitiateMultipartUpload(filepath.Base(testFile))
+
+	unfUploads, err := aliSvc.ListUnfinishedUploads()
+	if err != nil {
 		t.Fatalf("Failed to list unfinished uploads: %s", err)
 	}
-    unfUploadFound := false
-    for _, upload := range unfUploads {
-        t.Log(upload.Key, upload.UploadID)
-        if upload.Key == filepath.Base(testFile) {
-            unfUploadFound = true
-        }
-    }
-    if !unfUploadFound {
-        t.Fatalf("Failed to find unfinished upload %s to %s", testFile, filepath.Base(testFile))
-    }
-    
-    err = aliSvc.ResumeUpload(testFile, filepath.Base(testFile), imur.UploadID)
-    if err != nil {
+	unfUploadFound := false
+	for _, upload := range unfUploads {
+		t.Log(upload.Key, upload.UploadID)
+		if upload.Key == filepath.Base(testFile) {
+			unfUploadFound = true
+		}
+	}
+	if !unfUploadFound {
+		t.Fatalf("Failed to find unfinished upload %s to %s", testFile, filepath.Base(testFile))
+	}
+
+	err = aliSvc.ResumeUpload(testFile, filepath.Base(testFile), imur.UploadID)
+	if err != nil {
 		t.Fatalf("Failed to resume upload %s to %s: %s", testFile, filepath.Base(testFile), err)
 	}
-    
-    err = aliSvc.Delete(filepath.Base(testFile))
+
+	f, err := os.Create(testFileDownloaded)
 	if err != nil {
-		t.Fatalf("Failed to delete file %s: %s", filepath.Base(testFile), err)
+		t.Fatalf("Failed to create empty file %s for download %s: %s", testFileDownloaded, filepath.Base(testFile), err)
 	}
+	f.Close()
+
+	err = aliSvc.ResumeDownload(filepath.Base(testFile), testFileDownloaded)
+	if err != nil {
+		t.Fatalf("Failed to resume download %s to %s: %s", filepath.Base(testFile), testFileDownloaded, err)
+	}
+
+	md5test, err := md5sum(testFile)
+	if err != nil {
+		t.Fatalf("Failed to get MD5 of %s: %s", testFile, err)
+	}
+
+	md5downloaded, err := md5sum(testFile)
+	if err != nil {
+		t.Fatalf("Failed to get MD5 of %s: %s", testFileDownloaded, err)
+	}
+
+	if md5test != md5downloaded {
+		t.Fatalf("Failed to match MD5 of %s(%s) and %s(%s)", testFile, md5test, testFileDownloaded, md5downloaded)
+	}
+
+	err = aliSvc.Delete(filepath.Base(testFile))
+	if err != nil {
+		t.Fatalf("Failed to delete file %s from remote storage: %s", filepath.Base(testFile), err)
+	}
+
+	err = os.Remove(testFile)
+	if err != nil {
+		t.Fatalf("Failed to delete file %s: %s", testFile, err)
+	}
+
+	err = os.Remove(testFileDownloaded)
+	if err != nil {
+		t.Fatalf("Failed to delete file %s: %s", testFileDownloaded, err)
+	}
+
 }
 
 func TestBasic(t *testing.T) {
@@ -109,8 +149,8 @@ func TestBasic(t *testing.T) {
 		aliSvc.Log.Println(rFile.Type, rFile.Key)
 	}
 
-    subFolder := "testFolder"
-    
+	subFolder := "testFolder"
+
 	if subFolder != "" {
 		err = aliSvc.CreateFolder(subFolder)
 		if err != nil {
@@ -148,11 +188,11 @@ func TestBasic(t *testing.T) {
 	if !testFileUploadedSuccess {
 		t.Fatalf("Failed to upload file %s to %s: File does not exists on remote storage", testFile, subFolder+"/"+filepath.Base(testFile))
 	}
-    
-    err = os.Remove(testFile)
-    if err != nil {
-        t.Fatalf("Failed to remove uploaded file %s: %s", testFile, err)
-    }
+
+	err = os.Remove(testFile)
+	if err != nil {
+		t.Fatalf("Failed to remove uploaded file %s: %s", testFile, err)
+	}
 
 	err = aliSvc.Download(subFolder+"/"+filepath.Base(testFile), testFileDownloaded)
 	if err != nil {
@@ -164,9 +204,9 @@ func TestBasic(t *testing.T) {
 
 	}
 	err = os.Remove(testFileDownloaded)
-    if err != nil {
-        t.Fatalf("Failed to remove downloaded file %s: %s", testFileDownloaded, err)
-    }
+	if err != nil {
+		t.Fatalf("Failed to remove downloaded file %s: %s", testFileDownloaded, err)
+	}
 
 	err = aliSvc.Delete(subFolder + "/" + filepath.Base(testFile))
 	if err != nil {
@@ -175,7 +215,7 @@ func TestBasic(t *testing.T) {
 }
 
 func createTestFile(size int64) string {
-    binaryDir, err := osext.ExecutableFolder()
+	binaryDir, err := osext.ExecutableFolder()
 	if err != nil {
 		panic(fmt.Errorf("Failed to get binary folder: %s", err))
 	}
@@ -186,29 +226,29 @@ func createTestFile(size int64) string {
 	}
 	defer func() { _ = testFile.Close() }()
 
-    signature := []byte("test upload file")
-    sigLen := 2 * len(signature) // We will write signature twice
-    size = size - int64(sigLen)
-    
+	signature := []byte("test upload file")
+	sigLen := 2 * len(signature) // We will write signature twice
+	size = size - int64(sigLen)
+
 	_, err = testFile.Write(signature)
 	if err != nil {
 		panic(fmt.Errorf("Failed to write first signature to test file %s: %s", testFilePath, err))
 	}
 
-    chunkSize := int64(1024 * 1024 * 25)
+	chunkSize := int64(1024 * 1024 * 25)
 
 	for {
 		if size <= chunkSize {
 			s := make([]byte, size)
 			_, err := testFile.Write(s)
-            if err != nil {
-                panic(fmt.Errorf("Failed to write last chunk to test file %s: %s", testFilePath, err))
-            }
-            
-            _, err = testFile.Write(signature)
-            if err != nil {
-                panic(fmt.Errorf("Failed to write second signature to test file %s: %s", testFilePath, err))
-            }
+			if err != nil {
+				panic(fmt.Errorf("Failed to write last chunk to test file %s: %s", testFilePath, err))
+			}
+
+			_, err = testFile.Write(signature)
+			if err != nil {
+				panic(fmt.Errorf("Failed to write second signature to test file %s: %s", testFilePath, err))
+			}
 
 			return testFilePath
 		}
@@ -249,4 +289,21 @@ func getRandomString(n int) string {
 	}
 
 	return string(b)
+}
+
+func md5sum(filePath string) (result string, err error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+
+	hash := md5.New()
+	_, err = io.Copy(hash, file)
+	if err != nil {
+		return
+	}
+
+	result = hex.EncodeToString(hash.Sum(nil))
+	return
 }
