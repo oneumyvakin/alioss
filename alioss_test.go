@@ -12,6 +12,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -149,7 +150,7 @@ func TestBasic(t *testing.T) {
 		aliSvc.Log.Println(rFile.Type, rFile.Key)
 	}
 
-	subFolder := "testFolder"
+	subFolder := ""
 
 	if subFolder != "" {
 		err = aliSvc.CreateFolder(subFolder)
@@ -176,7 +177,7 @@ func TestBasic(t *testing.T) {
 		}
 		for _, rFile := range bucketList {
 			aliSvc.Log.Println(rFile.Type, rFile.Key)
-			if rFile.Key == subFolder+"/"+filepath.Base(testFile) {
+			if strings.HasSuffix(rFile.Key, filepath.Base(testFile)) {
 				testFileUploadedSuccess = true
 			}
 		}
