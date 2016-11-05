@@ -1,22 +1,22 @@
 package alioss
 
 import (
-    "fmt"
-    "os"
-    "path/filepath"
-    "bufio"
-    "io"
-    "sync"
-    "bytes"
-    "crypto/md5"
-    "encoding/hex"
-    
-    "github.com/aliyun/aliyun-oss-go-sdk/oss"
+	"bufio"
+	"bytes"
+	"crypto/md5"
+	"encoding/hex"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"sync"
+
+	"github.com/aliyun/aliyun-oss-go-sdk/oss"
 )
 
 const (
-    DefaultUploadConcurrency int = 5
-    DefaultUploadPartSize int64 = 5 * 1024 * 1024 // 5Mb
+	DefaultUploadConcurrency int   = 5
+	DefaultUploadPartSize    int64 = 5 * 1024 * 1024 // 5Mb
 )
 
 // Upload filePath to destinationPath, where destinationPath contains only folders like /folder/folder2
@@ -25,16 +25,16 @@ func (alioss AliOss) Upload(filePath, destinationPath string) error {
 	if err != nil {
 		return fmt.Errorf("Failed to open file %s for upload: %s\n", filePath, err)
 	}
-    alioss.IoClose(file)
+	alioss.IoClose(file)
 
 	key := destinationPath + "/" + filepath.Base(filePath)
 
-    bucket, err := alioss.Svc.Bucket(alioss.Bucket)
-    if err != nil {
-        return fmt.Errorf("Failed upload file %s: %s\n", filePath, err)
-    }
+	bucket, err := alioss.Svc.Bucket(alioss.Bucket)
+	if err != nil {
+		return fmt.Errorf("Failed upload file %s: %s\n", filePath, err)
+	}
 
-    err = bucket.UploadFile(key, filePath, DefaultUploadPartSize, oss.Routines(DefaultUploadConcurrency), oss.Checkpoint(true, ""))
+	err = bucket.UploadFile(key, filePath, DefaultUploadPartSize, oss.Routines(DefaultUploadConcurrency), oss.Checkpoint(true, ""))
 	if err != nil {
 		return fmt.Errorf("Failed upload file %s: %s\n", filePath, err)
 	}
@@ -54,21 +54,20 @@ func (alioss AliOss) ResumeUpload(filePath, key, uploadId string) (err error) {
 	pipeReader, writer := io.Pipe()
 
 	go func() {
-        bw := bufio.NewWriter(writer)
-        written, err := io.Copy(bw, file)
-        if err != nil {
-            alioss.Log.Printf("AmazonS3 Upload buffer io.Copy error: %s\n", err)
-        }
-        alioss.Log.Printf("AmazonS3 Upload buffer io.Copy written: %s\n", written)
+		bw := bufio.NewWriter(writer)
+		written, err := io.Copy(bw, file)
+		if err != nil {
+			alioss.Log.Printf("Upload buffer io.Copy error: %s\n", err)
+		}
+		alioss.Log.Printf("Upload buffer io.Copy written: %s\n", written)
 
-        alioss.IoClose(file)
-        err = bw.Flush()
-        if err != nil {
-            alioss.Log.Printf("bufio flush error: %s\n", err)
-        }
-        alioss.IoClose(writer)
-    }()
-	
+		alioss.IoClose(file)
+		err = bw.Flush()
+		if err != nil {
+			alioss.Log.Printf("bufio flush error: %s\n", err)
+		}
+		alioss.IoClose(writer)
+	}()
 
 	alioss.Log.Printf("Resume Upload %s to %s\n", filePath, key)
 
@@ -165,24 +164,24 @@ func (alioss AliOss) needToUpload(uploadedParts []oss.UploadedPart, partNumber i
 
 func (alioss AliOss) asyncUploadPart(key string, uploadId string, partChan <-chan filePart, wg *sync.WaitGroup) {
 	defer wg.Done()
-    bucket, err := alioss.Svc.Bucket(alioss.Bucket)
-    if err != nil {
-        alioss.Log.Printf("Failed to upload part for key %s: %s\n", key, err)
-        return
-    }
-    
+	bucket, err := alioss.Svc.Bucket(alioss.Bucket)
+	if err != nil {
+		alioss.Log.Printf("Failed to upload part for key %s: %s\n", key, err)
+		return
+	}
+
 	for {
 		if part, ok := <-partChan; ok {
 			alioss.Log.Printf("Start to upload part number %s for key %s\n", part.PartNumber, key)
 			_, err := bucket.UploadPart(
-                oss.InitiateMultipartUploadResult{
-                    Bucket:     alioss.Bucket,
-                    Key:        key,
-                    UploadID:   uploadId,
-                },
-                bytes.NewReader(part.Body),
-                DefaultUploadPartSize,
-                part.PartNumber,
+				oss.InitiateMultipartUploadResult{
+					Bucket:   alioss.Bucket,
+					Key:      key,
+					UploadID: uploadId,
+				},
+				bytes.NewReader(part.Body),
+				DefaultUploadPartSize,
+				part.PartNumber,
 			)
 			if err != nil {
 				alioss.Log.Printf("Failed to upload part number %s for key %s: %s\n", part.PartNumber, key, err)
@@ -201,21 +200,21 @@ func (alioss AliOss) asyncUploadPart(key string, uploadId string, partChan <-cha
 
 func (alioss AliOss) uploadPart(key string, partNumber int, uploadId string, body []byte) (err error) {
 	alioss.Log.Printf("Start upload part number %d of key %s for upload id %s\n", partNumber, key, uploadId)
-    
-    bucket, err := alioss.Svc.Bucket(alioss.Bucket)
-    if err != nil {
-        alioss.Log.Printf("Failed to upload part for key %s: %s\n", key, err)
-        return
-    }
-    
+
+	bucket, err := alioss.Svc.Bucket(alioss.Bucket)
+	if err != nil {
+		alioss.Log.Printf("Failed to upload part for key %s: %s\n", key, err)
+		return
+	}
+
 	_, err = bucket.UploadPart(
-        oss.InitiateMultipartUploadResult{
-            Bucket:     alioss.Bucket,
-            Key:        key,
-            UploadID:   uploadId,
-        },
-        bytes.NewReader(body),
-        DefaultUploadPartSize,
+		oss.InitiateMultipartUploadResult{
+			Bucket:   alioss.Bucket,
+			Key:      key,
+			UploadID: uploadId,
+		},
+		bytes.NewReader(body),
+		DefaultUploadPartSize,
 		partNumber,
 	)
 

@@ -8,7 +8,7 @@ import (
 	"os"
 	"sort"
 	"strings"
-    
+
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
 )
 
@@ -107,17 +107,17 @@ func (alioss AliOss) CreateBucket(name string) error {
 }
 
 func (alioss AliOss) CreateFolder(path string) error {
-    bucket, err := alioss.Svc.Bucket(alioss.Bucket)
+	bucket, err := alioss.Svc.Bucket(alioss.Bucket)
 	if err != nil {
 		alioss.Log.Printf("Failed to create folder %s: %s\n", path, err)
 		return err
 	}
-    var emptyReader io.Reader
-	err = bucket.PutObject(path + "/", emptyReader)
-    if err != nil {
-        alioss.Log.Printf("Failed to create folder %s: %s\n", path, err)
+	var emptyReader io.Reader
+	err = bucket.PutObject(path+"/", emptyReader)
+	if err != nil {
+		alioss.Log.Printf("Failed to create folder %s: %s\n", path, err)
 		return err
-    }
+	}
 
 	return err
 }
@@ -131,11 +131,11 @@ func (alioss AliOss) GetBucketFilesList(subFolder string) ([]oss.ObjectPropertie
 		alioss.Log.Printf("Failed to list objects: %s\n", err)
 		return nil, err
 	}
-    
-    subFolder = strings.TrimSuffix(subFolder, "/")
-    if subFolder != "" {
-        subFolder = subFolder + "/"
-    }
+
+	subFolder = strings.TrimSuffix(subFolder, "/")
+	if subFolder != "" {
+		subFolder = subFolder + "/"
+	}
 	result, err := bucket.ListObjects(oss.Prefix(subFolder), oss.Delimiter("/"))
 	if err != nil {
 		alioss.Log.Printf("Failed to list objects: %s\n", err)
@@ -165,7 +165,7 @@ func (alioss AliOss) GetFileInfo(path string) (headers http.Header, err error) {
 		return
 	}
 
-	headers, err = bucket.GetObjectMeta(path)
+	headers, err = bucket.GetObjectDetailedMeta(path)
 	if err != nil {
 		alioss.Log.Printf("Failed to get file %s info: %s\n", path, err)
 		return
