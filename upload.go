@@ -26,12 +26,14 @@ func (alioss AliOss) Upload(filePath, destinationPath string) error {
 		return fmt.Errorf("Failed to open file %s for upload: %s\n", filePath, err)
 	}
 	alioss.IoClose(file)
-
+    
 	key := destinationPath + "/" + filepath.Base(filePath)
 	if destinationPath == "" || destinationPath == "/" {
 		key = filepath.Base(filePath)
 	}
 
+    alioss.Log.Printf("Start upload %s to %s", filePath, key)
+    
 	bucket, err := alioss.Svc.Bucket(alioss.Bucket)
 	if err != nil {
 		return fmt.Errorf("Failed upload file %s: %s\n", filePath, err)
@@ -73,7 +75,7 @@ func (alioss AliOss) ResumeUpload(filePath, key, uploadId string) (err error) {
 		alioss.IoClose(writer)
 	}()
 
-	alioss.Log.Printf("Resume Upload %s to %s\n", filePath, key)
+	alioss.Log.Printf("Start resume upload %s to %s\n", filePath, key)
 
 	resp, err := alioss.ListParts(key, uploadId)
 	if err != nil {
