@@ -2,6 +2,7 @@
 package alioss
 
 import (
+    "bytes"
 	"fmt"
 	"io"
 	"log"
@@ -184,7 +185,7 @@ func (alioss AliOss) GetFileInfo(path string) (headers http.Header, err error) {
 }
 
 // Get file part
-func (alioss AliOss) GetFilePart(path string, start int64, end int64) (resp io.ReadCloser, err error) {
+func (alioss AliOss) GetFilePart(path string, start int64, end int64) (buf bytes.Buffer, err error) {
     path = strings.TrimPrefix(path, "/")
     
 	bucket, err := alioss.Svc.Bucket(alioss.Bucket)
@@ -193,13 +194,20 @@ func (alioss AliOss) GetFilePart(path string, start int64, end int64) (resp io.R
 		return
 	}
 
-	resp, err = bucket.GetObject(path, oss.Range(start, end))
+	resp, err := bucket.GetObject(path, oss.Range(start, end))
 	if err != nil {
 		alioss.Log.Printf("Failed to get file %s part: %s\n", path, err)
 		return
 	}
-
-	alioss.Log.Println("Get file part:", path)
+    defer alioss.IoClose(resp)
+    
+    n, err := io.Copy(&buf, resp)
+    if err != nil {
+		alioss.Log.Printf("Failed to get file %s part: %s\n", path, err)
+		return
+	}
+    
+	alioss.Log.Printf("Get file part of size %d: %s", n, path)
 	return
 }
 

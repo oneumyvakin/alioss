@@ -115,6 +115,9 @@ func (alioss AliOss) ResumeDownload(fileName, destinationPath string) error {
 	}()
 
 	wg.Wait()
+    if d.Err != nil {
+        return fmt.Errorf("Failed to download remote %s to %s: %s", fileName, destinationPath, d.Err)
+    }
 
 	return nil
 }
@@ -123,10 +126,10 @@ func (alioss *downloader) asyncDownloadPart(taskPartChan <-chan filePart, wg *sy
 	defer wg.Done()
 	for {
 		if part, ok := <-taskPartChan; ok {
-			if alioss.Err != nil {
-				alioss.Log.Printf("Failed to start download: %s\n", alioss.Err)
-				return
-			}
+            if alioss.Err != nil {
+                alioss.Log.Printf("Failed to start download %s: %s\n", part.Range, alioss.Err)
+                return
+            }
 			alioss.Log.Printf("Start to download part for key %s: Range: %s, Offset: %d, Length: %d\n", part.Key, part.Range, part.Offset, part.Length)
 
 			body, err := alioss.GetFilePart(part.Key, part.Offset, part.Offset+part.Length-1)
@@ -138,29 +141,33 @@ func (alioss *downloader) asyncDownloadPart(taskPartChan <-chan filePart, wg *sy
 			alioss.Log.Printf("Recieved response for %s range %s\n", part.Key, part.Range)
 			alioss.Log.Printf("File offset: %d\n", alioss.FileOffset)
 			alioss.Log.Printf("Part offset: %d\n", part.Offset)
-			//defer alioss.IoClose(body)
 
 			for {
+                if alioss.Err != nil {
+				    alioss.Log.Printf("Failed to write download %s: %s\n", part.Range, alioss.Err)
+                    //alioss.IoClose(body)
+				    return
+			    }
 				if alioss.FileOffset == part.Offset {
-					n, err := io.Copy(alioss.File, body)
+					n, err := io.Copy(alioss.File, &body)
 					if err != nil {
 						alioss.Err = err
 						alioss.Log.Printf("Failed to write file %s range %s: %s\n", part.Key, part.Range, err)
-						alioss.IoClose(body)
+                        //alioss.IoClose(body)
 						return
 					}
-					alioss.IoClose(body)
+
 					alioss.Log.Printf("Finish write %d bytes part range %s for key %s \n", n, part.Range, part.Key)
 
 					alioss.FileOffset = part.Offset + part.Length
 					alioss.Log.Printf("New file offset: %d\n", alioss.FileOffset)
+                    //alioss.IoClose(body)
 					break
 				}
 				time.Sleep(10 * time.Millisecond)
 			}
 		} else {
 			alioss.Log.Println("Download channel closed. Return.")
-
 			return
 		}
 	}
