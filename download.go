@@ -145,7 +145,7 @@ func (alioss *downloader) asyncDownloadPart(taskPartChan <-chan filePart, wg *sy
 			for {
                 if alioss.Err != nil {
 				    alioss.Log.Printf("Failed to write download %s: %s\n", part.Range, alioss.Err)
-                    //alioss.IoClose(body)
+
 				    return
 			    }
 				if alioss.FileOffset == part.Offset {
@@ -153,7 +153,7 @@ func (alioss *downloader) asyncDownloadPart(taskPartChan <-chan filePart, wg *sy
 					if err != nil {
 						alioss.Err = err
 						alioss.Log.Printf("Failed to write file %s range %s: %s\n", part.Key, part.Range, err)
-                        //alioss.IoClose(body)
+
 						return
 					}
 
@@ -161,7 +161,7 @@ func (alioss *downloader) asyncDownloadPart(taskPartChan <-chan filePart, wg *sy
 
 					alioss.FileOffset = part.Offset + part.Length
 					alioss.Log.Printf("New file offset: %d\n", alioss.FileOffset)
-                    //alioss.IoClose(body)
+
 					break
 				}
 				time.Sleep(10 * time.Millisecond)
