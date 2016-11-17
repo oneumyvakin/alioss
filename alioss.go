@@ -2,7 +2,7 @@
 package alioss
 
 import (
-    "bytes"
+	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -111,9 +111,9 @@ func (alioss AliOss) CreateBucket(name string) error {
 
 // Create folder
 func (alioss AliOss) CreateFolder(path string) error {
-    path = strings.TrimPrefix(path, "/")
+	path = strings.TrimPrefix(path, "/")
 	path = strings.TrimSuffix(path, "/")
-    
+
 	bucket, err := alioss.Svc.Bucket(alioss.Bucket)
 	if err != nil {
 		alioss.Log.Printf("Failed to create folder %s: %s\n", path, err)
@@ -138,7 +138,7 @@ func (alioss AliOss) GetBucketFilesList(subFolder string) ([]oss.ObjectPropertie
 		return nil, err
 	}
 
-    subFolder = strings.TrimPrefix(subFolder, "/")
+	subFolder = strings.TrimPrefix(subFolder, "/")
 	subFolder = strings.TrimSuffix(subFolder, "/")
 	if subFolder != "" {
 		subFolder = subFolder + "/"
@@ -156,8 +156,8 @@ func (alioss AliOss) GetBucketFilesList(subFolder string) ([]oss.ObjectPropertie
 // Get file info
 // Returns HTTP headers
 func (alioss AliOss) GetFileInfo(path string) (headers http.Header, err error) {
-    path = strings.TrimPrefix(path, "/")
-    
+	path = strings.TrimPrefix(path, "/")
+
 	bucket, err := alioss.Svc.Bucket(alioss.Bucket)
 	if err != nil {
 		alioss.Log.Printf("Failed to get file %s info: %s\n", path, err)
@@ -186,8 +186,8 @@ func (alioss AliOss) GetFileInfo(path string) (headers http.Header, err error) {
 
 // Get file part
 func (alioss AliOss) GetFilePart(path string, start int64, end int64) (buf bytes.Buffer, err error) {
-    path = strings.TrimPrefix(path, "/")
-    
+	path = strings.TrimPrefix(path, "/")
+
 	bucket, err := alioss.Svc.Bucket(alioss.Bucket)
 	if err != nil {
 		alioss.Log.Printf("Failed to get file %s info: %s\n", path, err)
@@ -199,22 +199,22 @@ func (alioss AliOss) GetFilePart(path string, start int64, end int64) (buf bytes
 		alioss.Log.Printf("Failed to get file %s part: %s\n", path, err)
 		return
 	}
-    defer alioss.IoClose(resp)
-    
-    n, err := io.Copy(&buf, resp)
-    if err != nil {
+	defer alioss.IoClose(resp)
+
+	n, err := io.Copy(&buf, resp)
+	if err != nil {
 		alioss.Log.Printf("Failed to get file %s part: %s\n", path, err)
 		return
 	}
-    
+
 	alioss.Log.Printf("Get file part of size %d: %s", n, path)
 	return
 }
 
 // Delete file
 func (alioss AliOss) Delete(path string) (err error) {
-    path = strings.TrimPrefix(path, "/")
-    
+	path = strings.TrimPrefix(path, "/")
+
 	bucket, err := alioss.Svc.Bucket(alioss.Bucket)
 	if err != nil {
 		alioss.Log.Printf("Failed to get file %s info: %s\n", path, err)
@@ -255,8 +255,8 @@ func (alioss AliOss) ListUnfinishedUploads() ([]oss.UncompletedUpload, error) {
 // UploadedParts.PartNumber
 // UploadedParts.Size
 func (alioss AliOss) ListParts(key string, uploadId string) (resp oss.ListUploadedPartsResult, err error) {
-    key = strings.TrimPrefix(key, "/")
-    
+	key = strings.TrimPrefix(key, "/")
+
 	bucket, err := alioss.Svc.Bucket(alioss.Bucket)
 	if err != nil {
 		alioss.Log.Printf("Failed list parts: %s\n", err)
@@ -281,8 +281,8 @@ func (alioss AliOss) ListParts(key string, uploadId string) (resp oss.ListUpload
 
 // Abort upload
 func (alioss AliOss) AbortUpload(key string, uploadId string) (err error) {
-    key = strings.TrimPrefix(key, "/")
-    
+	key = strings.TrimPrefix(key, "/")
+
 	bucket, err := alioss.Svc.Bucket(alioss.Bucket)
 	if err != nil {
 		alioss.Log.Printf("Failed abort upload: %s\n", err)
@@ -307,8 +307,8 @@ func (alioss AliOss) AbortUpload(key string, uploadId string) (err error) {
 
 // Complete upload
 func (alioss AliOss) CompleteUpload(key string, uploadId string) (err error) {
-    key = strings.TrimPrefix(key, "/")
-    
+	key = strings.TrimPrefix(key, "/")
+
 	respParts, err := alioss.ListParts(key, uploadId) // Just for debug
 	if err != nil {
 		alioss.Log.Printf("Failed to complete upload: Failed to list parts for key %s of upload id %s: %s\n", key, uploadId, err)

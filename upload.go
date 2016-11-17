@@ -5,11 +5,12 @@ import (
 	"bytes"
 	"crypto/md5"
 	"encoding/hex"
-    "errors"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
@@ -18,6 +19,7 @@ import (
 const (
 	DefaultUploadConcurrency int   = 5
 	DefaultUploadPartSize    int64 = 5 * 1024 * 1024 // 5Mb
+	DefaultUploadRetries     int   = 5
 )
 
 // Upload filePath to destinationPath, where destinationPath contains only folders like /folder/folder2
@@ -27,14 +29,14 @@ func (alioss AliOss) Upload(filePath, destinationPath string) error {
 		return fmt.Errorf("Failed to open file %s for upload: %s\n", filePath, err)
 	}
 	alioss.IoClose(file)
-    
+
 	key := destinationPath + "/" + filepath.Base(filePath)
 	if destinationPath == "" || destinationPath == "/" {
 		key = filepath.Base(filePath)
 	}
 
-    alioss.Log.Printf("Start upload %s to %s", filePath, key)
-    
+	alioss.Log.Printf("Start upload %s to %s", filePath, key)
+
 	bucket, err := alioss.Svc.Bucket(alioss.Bucket)
 	if err != nil {
 		return fmt.Errorf("Failed upload file %s: %s\n", filePath, err)
@@ -64,9 +66,9 @@ func (alioss AliOss) ResumeUpload(filePath, key, uploadId string) (err error) {
 		bw := bufio.NewWriter(writer)
 		written, err := io.Copy(bw, file)
 		if err != nil {
-			alioss.Log.Printf("Upload buffer io.Copy error: %s\n", err)
+			alioss.Log.Printf("Upload buffer io.Copy error: %s", err)
 		}
-		alioss.Log.Printf("Upload buffer io.Copy written: %s\n", written)
+		alioss.Log.Printf("Upload buffer io.Copy written: %d", written)
 
 		alioss.IoClose(file)
 		err = bw.Flush()
@@ -85,10 +87,10 @@ func (alioss AliOss) ResumeUpload(filePath, key, uploadId string) (err error) {
 
 	partQueue := make(chan filePart, DefaultUploadConcurrency)
 	var wg sync.WaitGroup
-    var resultErrors []error
+	var resultErrors []error
 	for i := 0; i < DefaultUploadConcurrency; i++ {
 		wg.Add(1)
-		go alioss.asyncUploadPart(key, uploadId, partQueue, &wg, resultErrors)
+		go alioss.asyncUploadPart(key, uploadId, partQueue, &wg, &resultErrors)
 	}
 
 	go alioss.getFileParts(partQueue, pipeReader, resp.UploadedParts)
@@ -96,10 +98,10 @@ func (alioss AliOss) ResumeUpload(filePath, key, uploadId string) (err error) {
 	alioss.Log.Println("Wait for all parts are uploading...")
 	wg.Wait()
 
-    if len(resultErrors) > 0 {
-        return fmt.Errorf("Failed to resume upload with key %s: %s\n", key, resultErrors)
-    }
-    
+	if len(resultErrors) > 0 {
+		return fmt.Errorf("Failed to resume upload with key %s: %s\n", key, resultErrors)
+	}
+
 	err = alioss.CompleteUpload(key, uploadId)
 	if err != nil {
 		return fmt.Errorf("Failed to complete upload with key %s: %s\n", key, err)
@@ -124,7 +126,7 @@ func (alioss AliOss) getFileParts(partChan chan<- filePart, reader io.Reader, up
 		alioss.Log.Printf("Read bytes %d for part number %d with size: %d\n", partSize, lastPartNumber, len(part))
 
 		if int64(partSize) != DefaultUploadPartSize { // Last part of upload, allocate not default []byte
-            alioss.Log.Printf("Last part has number %d and size %d", lastPartNumber, partSize)
+			alioss.Log.Printf("Last part has number %d and size %d", lastPartNumber, partSize)
 			lastPart := make([]byte, partSize)
 			copy(lastPart, part)
 			part = lastPart
@@ -138,7 +140,7 @@ func (alioss AliOss) getFileParts(partChan chan<- filePart, reader io.Reader, up
 		alioss.Log.Printf("Part number %d size bytes %d has ETag: %s\n", lastPartNumber, len(part), partEtag)
 
 		if true == alioss.needToUpload(uploadedParts, lastPartNumber, partEtag) {
-            alioss.Log.Printf("Send part number %d of size bytes %d to upload", lastPartNumber, len(part))
+			alioss.Log.Printf("Send part number %d of size bytes %d to upload", lastPartNumber, len(part))
 			partChan <- filePart{
 				Body:       part,
 				PartNumber: lastPartNumber,
@@ -146,13 +148,14 @@ func (alioss AliOss) getFileParts(partChan chan<- filePart, reader io.Reader, up
 		}
 
 		offset = offset + int64(len(part))
-		lastPartNumber = lastPartNumber + 1
 
 		if errRead == io.EOF || errRead == io.ErrUnexpectedEOF {
 			alioss.Log.Printf("%s. All parts are read and sent to upload. Last part is %d, offset is %d", errRead, lastPartNumber, offset)
 			close(partChan)
 			return
 		}
+
+		lastPartNumber = lastPartNumber + 1
 	}
 }
 
@@ -161,7 +164,7 @@ func (alioss AliOss) needToUpload(uploadedParts []oss.UploadedPart, partNumber i
 		if part.PartNumber == partNumber {
 			alioss.Log.Printf("Part number %d with ETag %s found\n", part.PartNumber, string(part.ETag))
 
-			if part.ETag == partEtag {
+			if strings.ToLower(part.ETag) == strings.ToLower(partEtag) {
 				alioss.Log.Printf("Match Etag for part number %d with size %d ETag %s == %s.\n", part.PartNumber, part.Size, string(part.ETag), partEtag)
 				return false
 			} else {
@@ -175,7 +178,7 @@ func (alioss AliOss) needToUpload(uploadedParts []oss.UploadedPart, partNumber i
 	return true
 }
 
-func (alioss AliOss) asyncUploadPart(key string, uploadId string, partChan <-chan filePart, wg *sync.WaitGroup, resultErrors []error) {
+func (alioss AliOss) asyncUploadPart(key string, uploadId string, partChan <-chan filePart, wg *sync.WaitGroup, resultErrors *[]error) {
 	defer wg.Done()
 	bucket, err := alioss.Svc.Bucket(alioss.Bucket)
 	if err != nil {
@@ -186,19 +189,28 @@ func (alioss AliOss) asyncUploadPart(key string, uploadId string, partChan <-cha
 	for {
 		if part, ok := <-partChan; ok {
 			alioss.Log.Printf("Start to upload part number %d for key %s\n", part.PartNumber, key)
-			_, err := bucket.UploadPart(
-				oss.InitiateMultipartUploadResult{
-					Bucket:   alioss.Bucket,
-					Key:      key,
-					UploadID: uploadId,
-				},
-				bytes.NewReader(part.Body),
-				DefaultUploadPartSize,
-				part.PartNumber,
-			)
+			var err error
+			for try := 0; try <= DefaultUploadRetries; try++ {
+				_, err = bucket.UploadPart(
+					oss.InitiateMultipartUploadResult{
+						Bucket:   alioss.Bucket,
+						Key:      key,
+						UploadID: uploadId,
+					},
+					bytes.NewReader(part.Body),
+					DefaultUploadPartSize,
+					part.PartNumber,
+				)
+				if err != nil {
+					alioss.Log.Printf("Try %d of upload part number %d for key %s has failed: %s. Repeat...", try, part.PartNumber, key, err)
+				} else {
+					break
+				}
+			}
+
 			if err != nil {
-                resultErr := errors.New(fmt.Sprintf("Failed to upload part number %d for key %s: %s\n", part.PartNumber, key, err))
-                resultErrors = append(resultErrors, resultErr)
+				resultErr := errors.New(fmt.Sprintf("Failed to upload part number %d for key %s: %s\n", part.PartNumber, key, err))
+				*resultErrors = append(*resultErrors, resultErr)
 				alioss.Log.Printf("%s", resultErr)
 				return
 			}
@@ -243,7 +255,7 @@ func (alioss AliOss) getPartEtag(part []byte) (etag string, err error) {
 		alioss.Log.Printf("Failed to write part to md5 hasher: %s", err)
 		return
 	}
-	etag = fmt.Sprintf("\"%s\"", hex.EncodeToString(hasher.Sum(nil)))
+	etag = fmt.Sprintf("\"%s\"", strings.ToLower(hex.EncodeToString(hasher.Sum(nil))))
 
 	return
 }

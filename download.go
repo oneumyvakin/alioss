@@ -1,6 +1,7 @@
 package alioss
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -115,9 +116,9 @@ func (alioss AliOss) ResumeDownload(fileName, destinationPath string) error {
 	}()
 
 	wg.Wait()
-    if d.Err != nil {
-        return fmt.Errorf("Failed to download remote %s to %s: %s", fileName, destinationPath, d.Err)
-    }
+	if d.Err != nil {
+		return fmt.Errorf("Failed to download remote %s to %s: %s", fileName, destinationPath, d.Err)
+	}
 
 	return nil
 }
@@ -126,16 +127,17 @@ func (alioss *downloader) asyncDownloadPart(taskPartChan <-chan filePart, wg *sy
 	defer wg.Done()
 	for {
 		if part, ok := <-taskPartChan; ok {
-            if alioss.Err != nil {
-                alioss.Log.Printf("Failed to start download %s: %s\n", part.Range, alioss.Err)
-                return
-            }
+			if alioss.Err != nil {
+				alioss.Log.Printf("Failed to start download %s: %s\n", part.Range, alioss.Err)
+				return
+			}
 			alioss.Log.Printf("Start to download part for key %s: Range: %s, Offset: %d, Length: %d\n", part.Key, part.Range, part.Offset, part.Length)
 
 			body, err := alioss.GetFilePart(part.Key, part.Offset, part.Offset+part.Length-1)
 			alioss.Log.Printf("Request sent for %s range %s\n", part.Key, part.Range)
 			if err != nil {
-				alioss.Log.Printf("Failed to download file %s range %s: %s\n", part.Key, part.Range, err)
+				alioss.Err = errors.New(fmt.Sprintf("Failed to download file %s range %s: %s\n", part.Key, part.Range, err))
+				alioss.Log.Printf(alioss.Err.Error())
 				return
 			}
 			alioss.Log.Printf("Recieved response for %s range %s\n", part.Key, part.Range)
@@ -143,17 +145,15 @@ func (alioss *downloader) asyncDownloadPart(taskPartChan <-chan filePart, wg *sy
 			alioss.Log.Printf("Part offset: %d\n", part.Offset)
 
 			for {
-                if alioss.Err != nil {
-				    alioss.Log.Printf("Failed to write download %s: %s\n", part.Range, alioss.Err)
-
-				    return
-			    }
+				if alioss.Err != nil {
+					alioss.Log.Printf("Failed to write download %s: %s\n", part.Range, alioss.Err)
+					return
+				}
 				if alioss.FileOffset == part.Offset {
 					n, err := io.Copy(alioss.File, &body)
 					if err != nil {
-						alioss.Err = err
-						alioss.Log.Printf("Failed to write file %s range %s: %s\n", part.Key, part.Range, err)
-
+						alioss.Err = errors.New(fmt.Sprintf("Failed to write file %s range %s: %s\n", part.Key, part.Range, err))
+						alioss.Log.Printf(alioss.Err.Error())
 						return
 					}
 
@@ -161,7 +161,6 @@ func (alioss *downloader) asyncDownloadPart(taskPartChan <-chan filePart, wg *sy
 
 					alioss.FileOffset = part.Offset + part.Length
 					alioss.Log.Printf("New file offset: %d\n", alioss.FileOffset)
-
 					break
 				}
 				time.Sleep(10 * time.Millisecond)
